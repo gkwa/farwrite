@@ -1,0 +1,14 @@
+* farwrite
+
+** summary
+
+This is a description of project farwrite.
+
+** usage
+
+Example:
+#+begin_example
+make test
+./farwrite --help
+./farwrite --log-level=debug
+#+end_example
