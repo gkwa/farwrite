@@ -21,7 +21,11 @@ type Options struct {
 var trackedPaths []string
 
 func Execute() int {
-	options := parseArgs()
+	options, err := parseArgs()
+	if err != nil {
+		slog.Error("error parsing args", "error", err)
+		return 1
+	}
 
 	logger, err := getLogger(options.LogLevel, options.LogFormat)
 	if err != nil {
@@ -31,18 +35,29 @@ func Execute() int {
 
 	slog.SetDefault(logger)
 
+	if options.SourcePath == "" {
+		slog.Error("-src param is empty")
+		return 1
+	}
+
 	err = run(options)
 	if err != nil {
 		slog.Error("run", "error", err)
 		return 1
 	}
+
 	printTrackedPaths()
-	deleteTrackedPaths()
+
+	err = deleteTrackedPaths()
+	if err != nil {
+		slog.Error("deleteTrackedPaths", "error", err)
+		return 1
+	}
 
 	return 0
 }
 
-func parseArgs() Options {
+func parseArgs() (Options, error) {
 	options := Options{}
 
 	flag.StringVar(&options.LogLevel, "log-level", "info", "Log level (debug, info, warn, error), default: info")
@@ -51,7 +66,7 @@ func parseArgs() Options {
 
 	flag.Parse()
 
-	return options
+	return options, nil
 }
 
 func createInMemoryTar(srcPath string) ([]byte, error) {
@@ -155,8 +170,13 @@ func run(options Options) error {
 	srcPath := options.SourcePath
 	destPath := filepath.Join(srcPath, "{{ cookiecutter.project_slug }}")
 
-	if srcPath == "" {
-		return fmt.Errorf("source path is empty")
+	gitPath := filepath.Join(srcPath, ".git")
+	if _, err := os.Stat(gitPath); os.IsNotExist(err) {
+		return fmt.Errorf("source path does not contain .git folder: %s", srcPath)
+	}
+
+	if _, err := os.Stat(destPath); err == nil {
+		return fmt.Errorf("destination path already exists: %s", destPath)
 	}
 
 	srcInfo, err := os.Stat(srcPath)
@@ -192,7 +212,7 @@ func deleteTrackedPaths() error {
 		slog.Debug("deleting tracked", "path", path)
 		err := os.RemoveAll(path)
 		if err != nil {
-			slog.Error("Error deleting path", "path", path, "error", err)
+			slog.Error("error deleting path", "path", path, "error", err)
 			return fmt.Errorf("error deleting path: %s, %v", path, err)
 		}
 	}
